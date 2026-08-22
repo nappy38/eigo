@@ -139,6 +139,16 @@
   .fanswer.hidden{filter:blur(8px)}
   .fbtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
   .fmsg{text-align:center;color:var(--good);font-size:13px;min-height:18px;margin-top:8px}
+  /* データの引っこし（書き出し・読み込み） */
+  .datapanel{margin-top:22px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .datapanel summary{cursor:pointer;color:var(--sub);font-size:13px;font-weight:700;list-style:none}
+  .datapanel summary::-webkit-details-marker{display:none}
+  .datapanel summary::before{content:"＋ ";color:var(--pink)}
+  .datapanel[open] summary::before{content:"− "}
+  .dnote{color:var(--muted);font-size:12px;line-height:1.7;margin:10px 0}
+  .dbtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .dbtn{padding:9px 0;border:1px solid var(--line);border-radius:10px;background:var(--pinksoft);color:var(--ink);font-family:inherit;font-size:13px;font-weight:700}
+  .dbox{width:100%;height:96px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-family:inherit;font-size:12px;resize:vertical}
 </style>
 </head>
 <body>
@@ -249,6 +259,18 @@
   <div class="note" style="margin-top:8px">
     日本語を見て2秒で声に出す → 「話す（採点）」で発音を採点 → 「お手本を聞く」で答え合わせ。
   </div>
+
+  <details class="datapanel">
+    <summary>データの引っこし（書き出し・読み込み）</summary>
+    <p class="dnote">アプリのURLが変わると、定着度・苦手リスト・日記などは引き継がれません。引っこす前に「書き出す」→「コピー」、新しいURLで貼り付けて「読み込む」を押してください。ふだんのバックアップにも使えます。</p>
+    <div class="dbtns">
+      <button id="dExport" class="dbtn">書き出す</button>
+      <button id="dCopy" class="dbtn">コピー</button>
+      <button id="dImport" class="dbtn">読み込む</button>
+    </div>
+    <textarea id="dBox" class="dbox" placeholder="「書き出す」を押すと、ここにデータが出ます。読み込むときは、ここに貼り付けてから「読み込む」を押します。"></textarea>
+    <div id="dMsg" class="fmsg"></div>
+  </details>
 </div>
 
 <script>
@@ -2886,6 +2908,45 @@ $("btnMic").onclick=()=>{
   try{rec.start();}catch(e){recording=false;$("btnMic").classList.remove("rec");$("btnMic").textContent="話す（採点）";}
 };
 load(); renderStats(); updateWeakCount();
+
+/* ---- データの引っこし ----
+   localStorage はURL（ドメイン）ごとに分かれているので、公開先を移すと学習データは付いてこない。
+   5つのキーをまとめてJSONにして、手で持ち運べるようにする。バックアップも兼ねる。 */
+(function(){
+  const KEYS=["mastery_v1","weak_v1","daily_v1","diary_v1","phrases_v1"];
+  const box=$("dBox"), msg=$("dMsg");
+  const tell=(t,ok)=>{ msg.textContent=t; msg.style.color=(ok===false)?"var(--bad)":"var(--good)"; };
+  $("dExport").onclick=()=>{
+    const out={_app:"eigo",_at:new Date().toISOString(),data:{}};
+    let n=0;
+    KEYS.forEach(k=>{ const v=localStorage.getItem(k); if(v!==null){ out.data[k]=v; n++; } });
+    box.value=JSON.stringify(out);
+    tell(n===0?"保存されている学習データがまだありません。":n+"個のデータを書き出しました。「コピー」を押して、新しいURLで読み込んでください。", n>0);
+  };
+  $("dCopy").onclick=()=>{
+    if(!box.value){ tell("先に「書き出す」を押してください。",false); return; }
+    box.select(); box.setSelectionRange(0,999999);
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(box.value)
+        .then(()=>tell("コピーしました。"))
+        .catch(()=>tell("コピーできませんでした。枠を長押しして選んでコピーしてください。",false));
+    }else{
+      try{ document.execCommand("copy"); tell("コピーしました。"); }
+      catch(e){ tell("枠を長押しして選んでコピーしてください。",false); }
+    }
+  };
+  $("dImport").onclick=()=>{
+    const t=box.value.trim();
+    if(!t){ tell("先に、書き出したデータを貼り付けてください。",false); return; }
+    let o; try{ o=JSON.parse(t); }catch(e){ tell("データの形が違います。全部そのまま貼り付けられているか確認してください。",false); return; }
+    if(!o||!o.data){ tell("このアプリの書き出しデータではないようです。",false); return; }
+    if(!confirm("今このURLに入っている学習データを、貼り付けた内容で上書きします。よろしいですか？")) return;
+    let n=0;
+    KEYS.forEach(k=>{ if(typeof o.data[k]==="string"){ localStorage.setItem(k,o.data[k]); n++; } });
+    tell(n+"個のデータを読み込みました。画面を作り直します。");
+    setTimeout(()=>location.reload(),900);
+  };
+})();
 </script>
 </body>
 </html>
